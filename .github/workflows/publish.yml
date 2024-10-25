@@ -32,7 +32,7 @@ jobs:
             - run: npm test
             - run: npm run build
             - name: Archive Production Artifacts
-              uses: actions/upload-artifact@v2
+              uses: actions/upload-artifact@v4
               with:
                   name: production-artifacts
                   path: dist
@@ -42,7 +42,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - uses: actions/download-artifact@v2
+            - uses: actions/download-artifact@v4
               with:
                   name: production-artifacts
                   path: dist
@@ -62,7 +62,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - uses: actions/download-artifact@v2
+            - uses: actions/download-artifact@v4
               with:
                   name: production-artifacts
                   path: dist
