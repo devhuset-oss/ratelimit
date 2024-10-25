@@ -68,11 +68,17 @@ export class Ratelimit {
 	 */
 	async limit(key: string): Promise<RatelimitResponse> {
 		try {
-			return this.options.type === 'fixed'
-				? this.fixedWindowLimit(key)
-				: this.slidingWindowLimit(key);
+			if (this.options.type === 'fixed') {
+				return await this.fixedWindowLimit(key);
+			} else {
+				return await this.slidingWindowLimit(key);
+			}
 		} catch (error) {
-			throw new RedisError('Failed to check rate limit', error as Error);
+			// Always create a new RedisError
+			throw new RedisError(
+				'Failed to check rate limit',
+				error instanceof Error ? error : new Error(String(error))
+			);
 		}
 	}
 
@@ -115,10 +121,10 @@ export class Ratelimit {
 		const now = Date.now();
 		const windowMs = this.options.window * 1000;
 		const currentWindow = Math.floor(now / windowMs);
-
 		const currentKey = this.getKey(key, currentWindow.toString());
 		const previousKey = this.getKey(key, (currentWindow - 1).toString());
 
+		// Get counts from both windows
 		const [currentCountStr, previousCountStr] = await Promise.all([
 			this.redis.get(currentKey),
 			this.redis.get(previousKey),
@@ -127,38 +133,42 @@ export class Ratelimit {
 		const currentCount = parseInt(currentCountStr || '0', 10);
 		const previousCount = parseInt(previousCountStr || '0', 10);
 
+		// Calculate the weight of the previous window
 		const timeIntoCurrentWindow = now % windowMs;
-		const proportionOfWindowRemaining =
-			(windowMs - timeIntoCurrentWindow) / windowMs;
+		const proportionOfWindowRemaining = Math.max(
+			0,
+			(windowMs - timeIntoCurrentWindow) / windowMs
+		);
 		const weightedPrevious = previousCount * proportionOfWindowRemaining;
-		const rate = weightedPrevious + currentCount + 1;
 
-		const nextWindowStart = (currentWindow + 1) * windowMs;
-		const resetTimestamp = Math.floor(nextWindowStart / 1000);
+		// Calculate total weighted rate
+		const rate = weightedPrevious + currentCount;
 
-		if (rate > this.options.limit) {
-			const retryAfter = previousCount
-				? Math.ceil(
-						((rate - this.options.limit) / previousCount) *
-							this.options.window
-					)
-				: this.options.window;
-
+		// Check if adding one more request would exceed limit
+		if (rate + 1 > this.options.limit) {
 			return {
 				success: false,
-				reset: resetTimestamp,
+				reset: Math.floor((currentWindow + 1) * this.options.window),
 				remaining: 0,
-				retryAfter,
+				retryAfter: Math.max(
+					1,
+					Math.ceil(
+						((rate + 1 - this.options.limit) * windowMs) /
+							(previousCount || 1) /
+							1000
+					)
+				),
 			};
 		}
 
+		// Increment current window counter
 		await this.redis.incr(currentKey);
 		await this.redis.expire(currentKey, this.options.window * 2);
 
 		return {
 			success: true,
-			reset: resetTimestamp,
-			remaining: Math.floor(this.options.limit - rate),
+			reset: Math.floor((currentWindow + 1) * this.options.window),
+			remaining: Math.floor(this.options.limit - rate - 1),
 		};
 	}
 }

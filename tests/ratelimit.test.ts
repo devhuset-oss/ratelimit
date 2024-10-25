@@ -1,5 +1,5 @@
 import { RedisClientType } from 'redis';
-import { ConfigurationError } from '../src/errors';
+import { ConfigurationError, RedisError } from '../src/errors';
 import { Ratelimit } from '../src/ratelimit';
 import { clearRedis, closeRedis, createTestClient } from './setup';
 
@@ -53,6 +53,106 @@ describe('Ratelimit', () => {
 			expect(() => {
 				new Ratelimit(redis, { type: 'fixed', limit: 10, window: 60 });
 			}).not.toThrow();
+		});
+
+		it('should throw ConfigurationError for invalid type', () => {
+			expect(() => {
+				new Ratelimit(redis, {
+					type: 'invalid' as any,
+					limit: 10,
+					window: 60,
+				});
+			}).toThrow('Type must be either "fixed" or "sliding"');
+		});
+
+		it('should use default prefix when none provided', () => {
+			const limiter = new Ratelimit(
+				redis,
+				Ratelimit.fixedWindow({
+					limit: 10,
+					window: 60,
+				})
+			);
+
+			// Access the private method using type assertion
+			const key = (limiter as any).getKey('test', 'suffix');
+			expect(key).toBe('ratelimit:test:suffix');
+		});
+
+		it('should use provided prefix', () => {
+			const limiter = new Ratelimit(
+				redis,
+				Ratelimit.fixedWindow({
+					limit: 10,
+					window: 60,
+					prefix: 'custom',
+				})
+			);
+
+			const key = (limiter as any).getKey('test', 'suffix');
+			expect(key).toBe('custom:test:suffix');
+		});
+	});
+
+	describe('Error Handling', () => {
+		it('should handle Redis errors correctly', async () => {
+			const mockRedis = {
+				incr: jest
+					.fn()
+					.mockRejectedValue(new Error('Redis connection lost')),
+				expire: jest.fn(),
+				get: jest.fn(),
+				ttl: jest.fn(),
+			} as unknown as RedisClientType;
+
+			const limiter = new Ratelimit(
+				mockRedis,
+				Ratelimit.fixedWindow({
+					limit: 10,
+					window: 60,
+				})
+			);
+
+			try {
+				await limiter.limit('test-key');
+				fail('Should have thrown an error');
+			} catch (err: unknown) {
+				const error = err as RedisError;
+				expect(error).toBeInstanceOf(RedisError);
+				expect(error.message).toBe('Failed to check rate limit');
+				expect(error.originalError).toBeInstanceOf(Error);
+				expect(error.originalError?.message).toBe(
+					'Redis connection lost'
+				);
+			}
+		});
+
+		it('should handle non-Error objects in catch block', async () => {
+			const mockRedis = {
+				incr: jest.fn().mockRejectedValue('string error'), // Non-Error rejection
+				expire: jest.fn(),
+				get: jest.fn(),
+				ttl: jest.fn(),
+			} as unknown as RedisClientType;
+
+			const limiter = new Ratelimit(
+				mockRedis,
+				Ratelimit.fixedWindow({
+					limit: 10,
+					window: 60,
+				})
+			);
+
+			try {
+				await limiter.limit('test-key');
+				fail('Should have thrown an error');
+			} catch (err: unknown) {
+				const error = err as RedisError;
+				expect(error).toBeInstanceOf(RedisError);
+				expect(error.message).toBe('Failed to check rate limit');
+				expect(error.originalError).toBeInstanceOf(Error);
+				expect(error.originalError?.message).toBe('string error');
+			}
 		});
 	});
 
