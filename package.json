@@ -1,0 +1,58 @@
+{
+	"name": "@devhuset-oss/ratelimit",
+	"version": "0.1.0",
+	"description": "A flexible rate limiting library with support for fixed and sliding windows using Redis",
+	"main": "dist/index.js",
+	"types": "dist/index.d.ts",
+	"files": [
+		"dist",
+		"README.md",
+		"LICENSE"
+	],
+	"scripts": {
+		"build": "tsc",
+		"test": "jest",
+		"test:watch": "jest --watch",
+		"test:coverage": "jest --coverage",
+		"lint": "eslint src/**/*.ts",
+		"format": "prettier --write \"src/**/*.ts\"",
+		"prepare": "npm run build",
+		"prepublishOnly": "npm test && npm run lint",
+		"preversion": "npm run lint",
+		"version": "npm run format && git add -A src",
+		"postversion": "git push && git push --tags"
+	},
+	"keywords": [
+		"rate-limit",
+		"redis",
+		"sliding-window",
+		"fixed-window",
+		"typescript",
+		"rate-limiting"
+	],
+	"author": "Devhuset",
+	"license": "MIT",
+	"peerDependencies": {
+		"redis": "^4.7.0"
+	},
+	"devDependencies": {
+		"@types/jest": "^29.5.14",
+		"@types/node": "^22.8.0",
+		"@typescript-eslint/eslint-plugin": "^8.11.0",
+		"@typescript-eslint/parser": "^8.11.0",
+		"eslint": "^9.13.0",
+		"jest": "^29.7.0",
+		"prettier": "^3.3.3",
+		"redis": "^4.7.0",
+		"ts-jest": "^29.2.5",
+		"typescript": "^5.6.3"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/devhuset-oss/ratelimit.git"
+	},
+	"bugs": {
+		"url": "https://github.com/devhuset-oss/ratelimit/issues"
+	},
+	"homepage": "https://github.com/devhuset-oss/ratelimit#readme"
+}
