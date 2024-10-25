@@ -46,9 +46,6 @@
 		"type": "git",
 		"url": "git+https://github.com/devhuset-oss/ratelimit.git"
 	},
-	"publishConfig": {
-		"registry": "https://npm.pkg.github.com/"
-	},
 	"bugs": {
 		"url": "https://github.com/devhuset-oss/ratelimit/issues"
 	},
