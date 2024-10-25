@@ -1,4 +1,4 @@
-name: Publish to NPM
+name: Publish to NPM and GPR
 
 on:
     release:
@@ -11,7 +11,6 @@ permissions:
 jobs:
     build:
         runs-on: ubuntu-latest
-
         services:
             redis:
                 image: redis
@@ -22,35 +21,51 @@ jobs:
                     --health-interval 10s
                     --health-timeout 5s
                     --health-retries 5
-
         steps:
             - uses: actions/checkout@v4
+            - name: Use Node.js
+              uses: actions/setup-node@v4
+              with:
+                  node-version: '20.x'
+                  cache: 'npm'
+            - run: npm ci
+            - run: npm test
+            - run: npm run build
+            - name: Archive Production Artifacts
+              uses: actions/upload-artifact@v2
+              with:
+                  name: production-artifacts
+                  path: dist
 
+    publish-npm:
+        needs: build
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+            - uses: actions/download-artifact@v2
+              with:
+                  name: production-artifacts
+                  path: dist
             - name: Use Node.js
               uses: actions/setup-node@v4
               with:
                   node-version: '20.x'
                   registry-url: 'https://registry.npmjs.org'
                   cache: 'npm'
-
-            - run: npm ci
-            - run: npm test
-            - run: npm run build
-
-            - name: Publish to NPM
-              run: npm publish --access public
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Configure npm for public registry
+              run: |
+                  echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+            - run: npm publish --access public
 
     publish-gpr:
         needs: build
         runs-on: ubuntu-latest
-        permissions:
-            contents: read
-            packages: write
         steps:
             - uses: actions/checkout@v4
-
+            - uses: actions/download-artifact@v2
+              with:
+                  name: production-artifacts
+                  path: dist
             - name: Use Node.js
               uses: actions/setup-node@v4
               with:
@@ -58,11 +73,8 @@ jobs:
                   registry-url: 'https://npm.pkg.github.com'
                   scope: '@devhuset-oss'
                   cache: 'npm'
-
-            - run: npm ci
-            - run: npm run build
-
-            - name: Publish to GitHub Packages
-              run: npm publish
-              env:
-                  NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+            - name: Configure npm for GitHub Packages
+              run: |
+                  echo "//npm.pkg.github.com/:_authToken=${{ secrets.GITHUB_TOKEN }}" > .npmrc
+                  echo "@devhuset-oss:registry=https://npm.pkg.github.com/" >> .npmrc
+            - run: npm publish
