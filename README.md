@@ -24,6 +24,8 @@ npm install @devhuset-oss/ratelimit redis
 yarn add @devhuset-oss/ratelimit redis
 # or
 pnpm add @devhuset-oss/ratelimit redis
+# or
+bun add @devhuset-oss/ratelimit redis
 ```
 
 ## Quick Start
@@ -45,7 +47,7 @@ const limiter = new Ratelimit(
 		limit: 10, // requests
 		window: 60, // seconds
 		prefix: 'my-api', // optional
-	})
+	}),
 );
 
 // Check rate limit
@@ -55,7 +57,7 @@ if (result.success) {
 	console.log(`${result.remaining} requests remaining`);
 } else {
 	// Rate limit exceeded
-	console.log(`Try again in ${result.retryAfter} seconds`);
+	console.log(`Try again in ${result.retry_after}ms`);
 }
 ```
 
@@ -72,7 +74,7 @@ const limiter = new Ratelimit(
 		limit: 100,
 		window: 60,
 		prefix: 'api', // optional
-	})
+	}),
 );
 ```
 
@@ -87,7 +89,7 @@ const limiter = new Ratelimit(
 		limit: 100,
 		window: 60,
 		prefix: 'api', // optional
-	})
+	}),
 );
 ```
 
@@ -96,25 +98,34 @@ const limiter = new Ratelimit(
 ### Configuration
 
 ```typescript
-interface LimiterOptions {
-  limit: number;     // Maximum requests per window
-  window: number;    // Window duration in seconds
-  prefix?: string;   // Optional Redis key prefix
+interface RatelimitOptionsWithoutType {
+    /** Maximum requests per window */
+    limit: number;
+    /** Window duration in seconds */
+    window: number;
+    /** Optional Redis key prefix */
+    prefix?: string;
 }
 
 // Create with static methods
-Ratelimit.fixedWindow(options: LimiterOptions)
-Ratelimit.slidingWindow(options: LimiterOptions)
+Ratelimit.fixedWindow(options: RatelimitOptionsWithoutType)
+Ratelimit.slidingWindow(options: RatelimitOptionsWithoutType)
 ```
 
 ### Response
 
 ```typescript
 interface RatelimitResponse {
-	success: boolean; // Whether the request is allowed
-	reset: number; // Unix timestamp when the window resets
-	remaining: number; // Remaining requests in current window
-	retryAfter?: number; // Seconds until next request is allowed (when rate limited)
+	/** Whether the request is allowed */
+	success: boolean;
+	/** Maximum number of requests allowed in the window */
+	limit: number;
+	/** Number of remaining requests in current window */
+	remaining: number;
+	/** Time in milliseconds until the next request will be allowed. 0 if under limit */
+	retry_after: number;
+	/** Time in milliseconds when the current window expires completely */
+	reset: number;
 }
 ```
 
@@ -139,14 +150,15 @@ const ratelimit = new Ratelimit(
 		limit: 10,
 		window: 60,
 		prefix: 'api',
-	})
+	}),
 );
 
 export async function GET() {
 	const headersList = headers();
 	const ip = headersList.get('x-forwarded-for') || '127.0.0.1';
 
-	const { success, remaining, reset, retryAfter } = await ratelimit.limit(ip);
+	const { success, remaining, reset, retry_after } =
+		await ratelimit.limit(ip);
 
 	if (!success) {
 		return NextResponse.json(
@@ -157,9 +169,9 @@ export async function GET() {
 					'X-RateLimit-Limit': '10',
 					'X-RateLimit-Remaining': remaining.toString(),
 					'X-RateLimit-Reset': reset.toString(),
-					'Retry-After': retryAfter?.toString() || '60',
+					'Retry-After': Math.ceil(retry_after / 1000).toString(),
 				},
-			}
+			},
 		);
 	}
 
@@ -187,19 +199,20 @@ const ratelimit = new Ratelimit(
 		limit: 10,
 		window: 60,
 		prefix: 'api',
-	})
+	}),
 );
 
 app.use(async (req, res, next) => {
 	const ip = req.ip;
-	const { success, remaining, reset, retryAfter } = await ratelimit.limit(ip);
+	const { success, remaining, reset, retry_after } =
+		await ratelimit.limit(ip);
 
 	res.setHeader('X-RateLimit-Limit', '10');
 	res.setHeader('X-RateLimit-Remaining', remaining.toString());
 	res.setHeader('X-RateLimit-Reset', reset.toString());
 
 	if (!success) {
-		res.setHeader('Retry-After', retryAfter?.toString() || '60');
+		res.setHeader('Retry-After', Math.ceil(retry_after / 1000).toString());
 		return res.status(429).json({ error: 'Too many requests' });
 	}
 

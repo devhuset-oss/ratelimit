@@ -1,6 +1,8 @@
 import { randomUUID } from 'crypto';
 import { Ratelimit } from './ratelimit';
-import { createClient, RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
+import { createClient } from 'redis';
+import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 
 let redis: RedisClientType;
 
@@ -22,7 +24,7 @@ describe('Rate Limiter Retry After', () => {
 				limit: 1,
 				window: 2,
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `retry-test-key-${randomUUID()}`;
@@ -38,7 +40,7 @@ describe('Rate Limiter Retry After', () => {
 
 		// Wait for retry_after duration
 		await new Promise((resolve) =>
-			setTimeout(resolve, second.retry_after + 100)
+			setTimeout(resolve, second.retry_after + 100),
 		); // Add 100ms buffer
 
 		// Should succeed after waiting
@@ -54,7 +56,7 @@ describe('Rate Limiter Retry After', () => {
 				limit: 1,
 				window: 2,
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `retry-test-key-${randomUUID()}`;
@@ -70,7 +72,7 @@ describe('Rate Limiter Retry After', () => {
 
 		// Wait for retry_after duration
 		await new Promise((resolve) =>
-			setTimeout(resolve, second.retry_after + 100)
+			setTimeout(resolve, second.retry_after + 100),
 		); // Add 100ms buffer
 
 		// Should succeed after waiting
@@ -86,7 +88,7 @@ describe('Rate Limiter Retry After', () => {
 				limit: 2,
 				window: 4, // 4 second window
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `retry-test-key-${randomUUID()}`;

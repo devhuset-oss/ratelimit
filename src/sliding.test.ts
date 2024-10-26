@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
-import { createClient, RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
+import { createClient } from 'redis';
 import { Ratelimit } from './ratelimit';
 import { randomUUID } from 'crypto';
 
@@ -23,7 +24,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 				limit: 10,
 				window: 1, // 1 second window for faster testing
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `sliding-test-key-weighted-${randomUUID()}`;
@@ -63,7 +64,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 				limit: 10,
 				window: 1, // 1 second window for faster testing
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `sliding-test-key-expiry-${randomUUID()}`;
@@ -97,7 +98,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 				limit: 10,
 				window: 1, // 1 second window for faster testing
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `sliding-test-key-transition-${randomUUID()}`;
@@ -128,7 +129,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 				limit: 5,
 				window: 1, // 1 second window for faster testing
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `sliding-test-key-boundary-${randomUUID()}`;

@@ -4,6 +4,7 @@
 	"description": "A flexible rate limiting library with support for fixed and sliding windows using Redis",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
+	"type": "module",
 	"files": [
 		"dist",
 		"README.md",
@@ -29,14 +30,16 @@
 		"redis": "^4.7.0"
 	},
 	"devDependencies": {
+		"@types/bun": "latest",
 		"@types/node": "^22.8.0",
 		"@typescript-eslint/eslint-plugin": "^8.11.0",
 		"@typescript-eslint/parser": "^8.11.0",
-		"eslint": "^8.57.1",
+		"eslint": "^9.13.0",
+		"eslint-config-prettier": "^9.1.0",
 		"prettier": "^3.3.3",
 		"redis": "^4.7.0",
 		"typescript": "^5.6.3",
-		"@types/bun": "latest"
+		"typescript-eslint": "^8.11.0"
 	},
 	"repository": {
 		"type": "git",

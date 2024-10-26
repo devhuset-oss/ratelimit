@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
-import { createClient, RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
+import { createClient } from 'redis';
 import { Ratelimit } from './ratelimit';
 import { randomUUID } from 'crypto';
 
@@ -23,7 +24,7 @@ describe('Fixed Window Rate Limiter', () => {
 				limit: 5,
 				window: 10, // 10 seconds
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `fixed-test-key-${randomUUID()}`;
@@ -46,7 +47,7 @@ describe('Fixed Window Rate Limiter', () => {
 				limit: 5,
 				window: 10, // 10 seconds
 				prefix: uniquePrefix,
-			})
+			}),
 		);
 
 		const testKey = `fixed-test-key-over-${randomUUID()}`;

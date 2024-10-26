@@ -1,5 +1,6 @@
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
-import { createClient, RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
+import { createClient } from 'redis';
 import { Ratelimit } from './ratelimit';
 import { ConfigurationError, RedisError } from './errors';
 import { randomUUID } from 'crypto';
@@ -24,8 +25,8 @@ describe('Rate Limiter Configuration', () => {
 					Ratelimit.fixedWindow({
 						limit: 0,
 						window: 10,
-					})
-				)
+					}),
+				),
 		).toThrow(ConfigurationError);
 
 		expect(
@@ -35,8 +36,8 @@ describe('Rate Limiter Configuration', () => {
 					Ratelimit.fixedWindow({
 						limit: -1,
 						window: 10,
-					})
-				)
+					}),
+				),
 		).toThrow(ConfigurationError);
 	});
 
@@ -48,8 +49,8 @@ describe('Rate Limiter Configuration', () => {
 					Ratelimit.fixedWindow({
 						limit: 10,
 						window: 0,
-					})
-				)
+					}),
+				),
 		).toThrow(ConfigurationError);
 
 		expect(
@@ -59,8 +60,8 @@ describe('Rate Limiter Configuration', () => {
 					Ratelimit.fixedWindow({
 						limit: 10,
 						window: -1,
-					})
-				)
+					}),
+				),
 		).toThrow(ConfigurationError);
 	});
 
@@ -71,13 +72,13 @@ describe('Rate Limiter Configuration', () => {
 					type: 'invalid' as unknown as 'fixed' | 'sliding',
 					limit: 10,
 					window: 10,
-				})
+				}),
 		).toThrow(ConfigurationError);
 	});
 });
 
 describe('Rate Limiter Redis Errors', () => {
-	it('handles Redis connection failures', async () => {
+	it('handles Redis connection failures', () => {
 		const brokenRedis = createClient({ url: 'redis://localhost:6380' }); // wrong port
 		const limiter = new Ratelimit(
 			// @ts-expect-error - broken redis client
@@ -85,27 +86,27 @@ describe('Rate Limiter Redis Errors', () => {
 			Ratelimit.fixedWindow({
 				limit: 5,
 				window: 10,
-			})
+			}),
 		);
 
-		await expect(limiter.limit('test')).rejects.toThrow(RedisError);
+		expect(limiter.limit('test')).rejects.toThrow(RedisError);
 	});
 
-	it('handles Redis script loading failures for sliding window', async () => {
+	it('handles Redis script loading failures for sliding window', () => {
 		const limiter = new Ratelimit(
 			redis,
 			Ratelimit.slidingWindow({
 				limit: 5,
 				window: 10,
-			})
+			}),
 		);
 
-		// @ts-expect-error - Accessing private property for testing
-		limiter.redis.scriptLoad = async () => {
+		// @ts-expect-error - Accessing private property for testing (redis)
+		limiter.redis.scriptLoad = () => {
 			throw new Error('Script load failed');
 		};
 
-		await expect(limiter.limit('test')).rejects.toThrow(RedisError);
+		expect(limiter.limit('test')).rejects.toThrow(RedisError);
 	});
 });
 
@@ -116,7 +117,7 @@ describe('Rate Limiter Key Prefixes', () => {
 			Ratelimit.fixedWindow({
 				limit: 5,
 				window: 10,
-			})
+			}),
 		);
 		const result = await limiter.limit('test');
 		expect(result.success).toBe(true);
@@ -130,7 +131,7 @@ describe('Rate Limiter Key Prefixes', () => {
 				limit: 5,
 				window: 10,
 				prefix,
-			})
+			}),
 		);
 		const result = await limiter.limit('test');
 		expect(result.success).toBe(true);
@@ -145,7 +146,7 @@ describe('Rate Limiter Response Structure', () => {
 				limit: 5,
 				window: 10,
 				prefix: `test-${randomUUID()}`,
-			})
+			}),
 		);
 
 		const result = await limiter.limit('test');
@@ -166,7 +167,7 @@ describe('Rate Limiter Response Structure', () => {
 				limit: 1,
 				window: 10,
 				prefix: `test-${randomUUID()}`,
-			})
+			}),
 		);
 
 		// Use up the limit
@@ -190,7 +191,7 @@ describe('Rate Limiter Response Structure', () => {
 				limit: 5,
 				window: 10,
 				prefix: `test-${randomUUID()}`,
-			})
+			}),
 		);
 
 		const result1 = await limiter.limit('test');

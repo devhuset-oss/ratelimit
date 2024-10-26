@@ -31,16 +31,39 @@ We use GitHub issues to track public bugs. Report a bug by [opening a new issue]
 ## Development Process
 
 1. Clone the repository
-2. Install dependencies: `pnpm install`
-3. Run tests: `pnpm test`
-4. Build: `pnpm build`
+2. Install dependencies: `bun install`
+3. Run tests: `bun test`
+4. Build: `bun run build`
 
 ## Testing
 
-We use Jest for testing. Run the test suite with:
+We use Bun for testing. Run the test suite with:
 
 ```bash
-pnpm test
+bun test
 ```
 
-Make sure to have Redis running locally or set the `REDIS_URL` environment variable.
+Make sure to have Redis running locally before running tests. You can start Redis using Docker:
+
+```bash
+docker run --rm -p 6379:6379 redis
+```
+
+## Project Structure
+
+```
+src/
+├── errors.ts      # Error definitions
+├── types.ts       # TypeScript interfaces
+├── ratelimit.ts   # Main rate limiter implementation
+└── tests/
+    ├── fixed.test.ts     # Fixed window tests
+    ├── sliding.test.ts   # Sliding window tests
+    └── errors.test.ts    # Error handling tests
+```
+
+## Code Style
+
+-   We use TypeScript and maintain strict type checking
+-   Format code using Prettier
+-   Follow existing code style and structure

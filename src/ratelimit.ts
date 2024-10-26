@@ -1,6 +1,6 @@
-import { RedisClientType } from 'redis';
+import type { RedisClientType } from 'redis';
 import { ConfigurationError, RedisError } from './errors';
-import {
+import type {
 	RatelimitOptions,
 	RatelimitOptionsWithoutType,
 	RatelimitResponse,
@@ -17,18 +17,20 @@ export class Ratelimit {
 
 	constructor(
 		redis: RedisClientType,
-		private readonly options: RatelimitOptions
+		private readonly options: RatelimitOptions,
 	) {
 		this.redis = redis;
 		this.validateOptions(options);
 	}
 
-	static fixedWindow(params: RatelimitOptionsWithoutType): RatelimitOptions {
+	public static fixedWindow(
+		params: RatelimitOptionsWithoutType,
+	): RatelimitOptions {
 		return { type: 'fixed', ...params };
 	}
 
-	static slidingWindow(
-		params: RatelimitOptionsWithoutType
+	public static slidingWindow(
+		params: RatelimitOptionsWithoutType,
 	): RatelimitOptions {
 		return { type: 'sliding', ...params };
 	}
@@ -42,7 +44,7 @@ export class Ratelimit {
 		}
 		if (options.type !== 'fixed' && options.type !== 'sliding') {
 			throw new ConfigurationError(
-				'Type must be either "fixed" or "sliding"'
+				'Type must be either "fixed" or "sliding"',
 			);
 		}
 	}
@@ -52,7 +54,7 @@ export class Ratelimit {
 		return `${prefix}:${identifier}:${suffix}`;
 	}
 
-	async limit(identifier: string): Promise<RatelimitResponse> {
+	public async limit(identifier: string): Promise<RatelimitResponse> {
 		try {
 			if (this.options.type === 'fixed') {
 				return await this.fixedWindowLimit(identifier);
@@ -62,7 +64,7 @@ export class Ratelimit {
 		} catch (error) {
 			throw new RedisError(
 				'Failed to check rate limit',
-				error instanceof Error ? error : new Error(String(error))
+				error instanceof Error ? error : new Error(String(error)),
 			);
 		}
 	}
@@ -73,13 +75,13 @@ export class Ratelimit {
 		} catch (error) {
 			throw new RedisError(
 				'Failed to load rate limit script',
-				error instanceof Error ? error : new Error(String(error))
+				error instanceof Error ? error : new Error(String(error)),
 			);
 		}
 	}
 
 	private async fixedWindowLimit(
-		identifier: string
+		identifier: string,
 	): Promise<RatelimitResponse> {
 		const now = Date.now();
 		const currentWindow = Math.floor(now / 1000 / this.options.window);
@@ -115,7 +117,7 @@ export class Ratelimit {
 	}
 
 	private async slidingWindowLimit(
-		identifier: string
+		identifier: string,
 	): Promise<RatelimitResponse> {
 		if (!this.scriptSha) {
 			await this.loadScript();
@@ -128,7 +130,7 @@ export class Ratelimit {
 		const currentKey = this.getKey(identifier, currentWindow.toString());
 		const previousKey = this.getKey(
 			identifier,
-			(currentWindow - 1).toString()
+			(currentWindow - 1).toString(),
 		);
 
 		const [remaining, retry_after] = (await this.redis.evalSha(
@@ -141,7 +143,7 @@ export class Ratelimit {
 					windowMs.toString(),
 					'1',
 				],
-			}
+			},
 		)) as [number, number];
 
 		return {
