@@ -42,7 +42,11 @@ jobs:
               uses: actions/upload-artifact@v4
               with:
                   name: production-artifacts
-                  path: dist
+                  path: |
+                      dist/**
+                      package.json
+                      README.md
+                      LICENSE
 
     publish-npm:
         needs: build
@@ -53,18 +57,16 @@ jobs:
             - uses: actions/download-artifact@v4
               with:
                   name: production-artifacts
-                  path: dist
 
             - name: Use Node.js
               uses: actions/setup-node@v4
               with:
                   node-version: '20.x'
                   registry-url: 'https://registry.npmjs.org'
-                  cache: 'npm'
 
             - name: Configure npm for public registry
               run: |
-                  echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+                  echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > ~/.npmrc
 
             - name: Publish to npm
               run: npm publish --access public
