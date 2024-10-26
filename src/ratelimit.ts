@@ -1,35 +1,16 @@
 import { RedisClientType } from 'redis';
 import { ConfigurationError, RedisError } from './errors';
+import {
+	RatelimitOptions,
+	RatelimitOptionsWithoutType,
+	RatelimitResponse,
+} from './types';
 
-interface RatelimitResponse {
-	success: boolean;
-	limit: number; // The configured limit
-	remaining: number; // Remaining requests in window
-	reset: number; // When the limit resets (unix timestamp in ms)
-}
-
-interface RatelimitOptionsWithoutType {
-	/**
-	 * Maximum number of requests allowed within the window
-	 */
-	limit: number;
-
-	/**
-	 * Time window in seconds
-	 */
-	window: number;
-
-	/**
-	 * Optional prefix for Redis keys
-	 * @default "ratelimit"
-	 */
-	prefix?: string;
-}
-
-interface RatelimitOptions extends RatelimitOptionsWithoutType {
-	type: 'fixed' | 'sliding';
-}
-
+/**
+ * Redis-based rate limiter supporting both fixed and sliding window algorithms.
+ * Fixed window divides time into discrete chunks while sliding window
+ * provides smoother rate limiting using weighted scoring.
+ */
 export class Ratelimit {
 	private readonly redis: RedisClientType;
 	private scriptSha: string | null = null;
@@ -104,33 +85,32 @@ export class Ratelimit {
 		const currentWindow = Math.floor(now / 1000 / this.options.window);
 		const windowKey = this.getKey(identifier, currentWindow.toString());
 
-		// Increment counter
 		const count = await this.redis.incr(windowKey);
 
-		// Set expiry on new keys
 		if (count === 1) {
 			await this.redis.expire(windowKey, this.options.window);
 		}
 
-		// Calculate reset time
-		const resetTime = (currentWindow + 1) * this.options.window;
+		const windowEnd = (currentWindow + 1) * this.options.window * 1000;
+		const reset = windowEnd;
 
-		// Check if over limit
 		if (count > this.options.limit) {
 			const ttl = await this.redis.ttl(windowKey);
 			return {
-				success: false, // Always false for fixed window
+				success: false,
 				limit: this.options.limit,
 				remaining: 0,
-				reset: Math.floor(now / 1000) + ttl,
+				retry_after: ttl * 1000,
+				reset,
 			};
 		}
 
 		return {
-			success: true, // Always true for fixed window
+			success: true,
 			limit: this.options.limit,
 			remaining: this.options.limit - count,
-			reset: resetTime,
+			retry_after: 0,
+			reset,
 		};
 	}
 
@@ -151,60 +131,71 @@ export class Ratelimit {
 			(currentWindow - 1).toString()
 		);
 
-		const remaining = (await this.redis.evalSha(this.scriptSha!, {
-			keys: [currentKey, previousKey],
-			arguments: [
-				this.options.limit.toString(),
-				now.toString(),
-				windowMs.toString(),
-				'1',
-			],
-		})) as number;
+		const [remaining, retry_after] = (await this.redis.evalSha(
+			this.scriptSha!,
+			{
+				keys: [currentKey, previousKey],
+				arguments: [
+					this.options.limit.toString(),
+					now.toString(),
+					windowMs.toString(),
+					'1',
+				],
+			}
+		)) as [number, number];
 
 		return {
 			success: remaining >= 0,
 			limit: this.options.limit,
 			remaining: Math.max(0, remaining),
-			reset: (currentWindow + 1) * windowMs,
+			retry_after: retry_after,
+			reset: Date.now() + this.options.window * 2000,
 		};
 	}
 }
 
+/**
+ * Sliding window rate limiting using weighted scoring from current and previous windows.
+ * Calculates retry_after based on how many requests need to expire from the previous window.
+ */
 export const SLIDING_WINDOW_SCRIPT = `
-local currentKey  = KEYS[1]           -- identifier including prefixes
-local previousKey = KEYS[2]           -- key of the previous bucket
-local tokens      = tonumber(ARGV[1]) -- tokens per window
-local now         = tonumber(ARGV[2]) -- current timestamp in milliseconds
-local window      = tonumber(ARGV[3]) -- interval in milliseconds
-local incrementBy = tonumber(ARGV[4]) -- increment rate per request, default is 1
+local currentKey = KEYS[1]
+local previousKey = KEYS[2]
+local tokens = tonumber(ARGV[1])
+local now = tonumber(ARGV[2])
+local window = tonumber(ARGV[3])
+local incrementBy = tonumber(ARGV[4])
 
--- Get current window count
 local current_count = tonumber(redis.call("GET", currentKey) or "0")
--- Get previous window count
 local previous_count = tonumber(redis.call("GET", previousKey) or "0")
 
--- Calculate the percentage of the current window that has passed
 local percentageInCurrent = (now % window) / window
-
--- Calculate weighted previous count using math.floor
-local weighted_previous = math.floor((1 - percentageInCurrent) * previous_count)
-
--- Check if cumulative requests exceed the limit **before** incrementing
-local cumulative_count = weighted_previous + current_count
+local weighted_previous = (1 - percentageInCurrent) * previous_count
+local cumulative_count = math.floor(weighted_previous) + current_count
 
 if cumulative_count >= tokens then
-  return -1
+    local needed = math.max(1, (cumulative_count + 1) - tokens)
+    local retry_after = window
+
+    if previous_count > 0 then
+        local expire_percent_needed = needed / previous_count
+        local time_passed = percentageInCurrent * window
+        local time_remaining = window - time_passed
+        retry_after = math.ceil(expire_percent_needed * window)
+        
+        if retry_after > time_remaining then
+            retry_after = time_remaining
+        end
+    end
+
+    return { -1, retry_after }
 end
 
--- If we get here, increment the current window
 local new_count = redis.call("INCRBY", currentKey, incrementBy)
 
--- Set expiration for the current key if it's the first time it's set
 if new_count == incrementBy then
-  redis.call("PEXPIRE", currentKey, window * 2 + 1000)
+    redis.call("PEXPIRE", currentKey, window * 2 + 1000)
 end
 
--- Calculate remaining tokens
-local remaining = tokens - (weighted_previous + new_count)
-return remaining
+return { tokens - (math.floor(weighted_previous) + new_count), 0 }
 `;

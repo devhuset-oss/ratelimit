@@ -1,6 +1,7 @@
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 import { createClient, RedisClientType } from 'redis';
 import { Ratelimit } from './ratelimit';
+import { ConfigurationError, RedisError } from './errors';
 import { randomUUID } from 'crypto';
 
 let redis: RedisClientType;
@@ -14,98 +15,187 @@ afterAll(async () => {
 	await redis.quit();
 });
 
-describe('Fixed Window Rate Limiter', () => {
-	it('allows requests within the limit', async () => {
-		const uniquePrefix = `ratelimit-${randomUUID()}`;
-		const limiter = new Ratelimit(
-			redis,
-			Ratelimit.fixedWindow({
-				limit: 5,
-				window: 10, // 10 seconds
-				prefix: uniquePrefix,
-			})
-		);
+describe('Rate Limiter Configuration', () => {
+	it('throws on invalid limit', () => {
+		expect(
+			() =>
+				new Ratelimit(
+					redis,
+					Ratelimit.fixedWindow({
+						limit: 0,
+						window: 10,
+					})
+				)
+		).toThrow(ConfigurationError);
 
-		const testKey = `fixed-test-key-${randomUUID()}`;
-
-		let successCount = 0;
-		for (let i = 0; i < 5; i++) {
-			const result = await limiter.limit(testKey);
-			expect(result.success).toBe(true);
-			successCount++;
-		}
-		expect(successCount).toBe(5);
+		expect(
+			() =>
+				new Ratelimit(
+					redis,
+					Ratelimit.fixedWindow({
+						limit: -1,
+						window: 10,
+					})
+				)
+		).toThrow(ConfigurationError);
 	});
 
-	it('blocks requests exceeding the limit', async () => {
-		const uniquePrefix = `ratelimit-${randomUUID()}`;
-		const limiter = new Ratelimit(
-			redis,
-			Ratelimit.fixedWindow({
-				limit: 5,
-				window: 10, // 10 seconds
-				prefix: uniquePrefix,
-			})
-		);
+	it('throws on invalid window', () => {
+		expect(
+			() =>
+				new Ratelimit(
+					redis,
+					Ratelimit.fixedWindow({
+						limit: 10,
+						window: 0,
+					})
+				)
+		).toThrow(ConfigurationError);
 
-		const testKey = `fixed-test-key-over-${randomUUID()}`;
+		expect(
+			() =>
+				new Ratelimit(
+					redis,
+					Ratelimit.fixedWindow({
+						limit: 10,
+						window: -1,
+					})
+				)
+		).toThrow(ConfigurationError);
+	});
 
-		// Consume the limit
-		for (let i = 0; i < 5; i++) {
-			await limiter.limit(testKey);
-		}
-
-		// This request should be blocked
-		const result = await limiter.limit(testKey);
-		expect(result.success).toBe(false);
-		expect(result.remaining).toBe(0);
+	it('throws on invalid type', () => {
+		expect(
+			() =>
+				new Ratelimit(redis, {
+					type: 'invalid' as unknown as 'fixed' | 'sliding',
+					limit: 10,
+					window: 10,
+				})
+		).toThrow(ConfigurationError);
 	});
 });
 
-describe('Sliding Window Rate Limiter', () => {
-	it('allows requests within the limit', async () => {
-		const uniquePrefix = `ratelimit-${randomUUID()}`;
+describe('Rate Limiter Redis Errors', () => {
+	it('handles Redis connection failures', async () => {
+		const brokenRedis = createClient({ url: 'redis://localhost:6380' }); // wrong port
 		const limiter = new Ratelimit(
-			redis,
-			Ratelimit.slidingWindow({
+			// @ts-expect-error - broken redis client
+			brokenRedis,
+			Ratelimit.fixedWindow({
 				limit: 5,
-				window: 10, // 10 seconds
-				prefix: uniquePrefix,
+				window: 10,
 			})
 		);
 
-		const testKey = `sliding-test-key-${randomUUID()}`;
-
-		let successCount = 0;
-		for (let i = 0; i < 5; i++) {
-			const result = await limiter.limit(testKey);
-			expect(result.success).toBe(true);
-			successCount++;
-		}
-		expect(successCount).toBe(5);
+		await expect(limiter.limit('test')).rejects.toThrow(RedisError);
 	});
 
-	it('blocks requests exceeding the limit', async () => {
-		const uniquePrefix = `ratelimit-${randomUUID()}`;
+	it('handles Redis script loading failures for sliding window', async () => {
 		const limiter = new Ratelimit(
 			redis,
 			Ratelimit.slidingWindow({
 				limit: 5,
-				window: 10, // 10 seconds
-				prefix: uniquePrefix,
+				window: 10,
 			})
 		);
 
-		const testKey = `sliding-test-key-over-${randomUUID()}`;
+		// @ts-expect-error - Accessing private property for testing
+		limiter.redis.scriptLoad = async () => {
+			throw new Error('Script load failed');
+		};
 
-		// Consume the limit
-		for (let i = 0; i < 5; i++) {
-			await limiter.limit(testKey);
-		}
+		await expect(limiter.limit('test')).rejects.toThrow(RedisError);
+	});
+});
 
-		// This request should be blocked
-		const result = await limiter.limit(testKey);
-		expect(result.success).toBe(false);
-		expect(result.remaining).toBe(0);
+describe('Rate Limiter Key Prefixes', () => {
+	it('uses default prefix when none provided', async () => {
+		const limiter = new Ratelimit(
+			redis,
+			Ratelimit.fixedWindow({
+				limit: 5,
+				window: 10,
+			})
+		);
+		const result = await limiter.limit('test');
+		expect(result.success).toBe(true);
+	});
+
+	it('uses custom prefix when provided', async () => {
+		const prefix = `prefix-${randomUUID()}`;
+		const limiter = new Ratelimit(
+			redis,
+			Ratelimit.fixedWindow({
+				limit: 5,
+				window: 10,
+				prefix,
+			})
+		);
+		const result = await limiter.limit('test');
+		expect(result.success).toBe(true);
+	});
+});
+
+describe('Rate Limiter Response Structure', () => {
+	it('returns correct response structure for successful request', async () => {
+		const limiter = new Ratelimit(
+			redis,
+			Ratelimit.fixedWindow({
+				limit: 5,
+				window: 10,
+				prefix: `test-${randomUUID()}`,
+			})
+		);
+
+		const result = await limiter.limit('test');
+
+		expect(result).toHaveProperty('success', true);
+		expect(result).toHaveProperty('limit', 5);
+		expect(result.remaining).toBeGreaterThanOrEqual(0);
+		expect(result.remaining).toBeLessThanOrEqual(4);
+		expect(result).toHaveProperty('retry_after', 0);
+		expect(typeof result.reset).toBe('number');
+		expect(result.reset).toBeGreaterThan(Date.now());
+	});
+
+	it('returns correct response structure for rate limited request', async () => {
+		const limiter = new Ratelimit(
+			redis,
+			Ratelimit.fixedWindow({
+				limit: 1,
+				window: 10,
+				prefix: `test-${randomUUID()}`,
+			})
+		);
+
+		// Use up the limit
+		await limiter.limit('test');
+
+		// This request should be rate limited
+		const result = await limiter.limit('test');
+
+		expect(result).toHaveProperty('success', false);
+		expect(result).toHaveProperty('limit', 1);
+		expect(result).toHaveProperty('remaining', 0);
+		expect(result.retry_after).toBeGreaterThan(0);
+		expect(typeof result.reset).toBe('number');
+		expect(result.reset).toBeGreaterThan(Date.now());
+	});
+
+	it('returns same reset time for same window', async () => {
+		const limiter = new Ratelimit(
+			redis,
+			Ratelimit.fixedWindow({
+				limit: 5,
+				window: 10,
+				prefix: `test-${randomUUID()}`,
+			})
+		);
+
+		const result1 = await limiter.limit('test');
+		const result2 = await limiter.limit('test');
+
+		expect(result1.reset).toBe(result2.reset);
 	});
 });

@@ -1,5 +1,9 @@
 /**
- * Custom error for configuration validation failures
+ * Thrown when rate limiter configuration is invalid
+ * @example
+ * ```ts
+ * throw new ConfigurationError('Limit must be greater than 0')
+ * ```
  */
 export class ConfigurationError extends Error {
 	constructor(message: string) {
@@ -9,7 +13,11 @@ export class ConfigurationError extends Error {
 }
 
 /**
- * Custom error for Redis operation failures
+ * Thrown when Redis operations fail. Includes the original Redis error if available
+ * @example
+ * ```ts
+ * throw new RedisError('Failed to check rate limit', originalError)
+ * ```
  */
 export class RedisError extends Error {
 	constructor(
