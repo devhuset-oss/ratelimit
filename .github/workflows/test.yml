@@ -21,19 +21,19 @@ jobs:
                     --health-timeout 5s
                     --health-retries 5
 
-        strategy:
-            matrix:
-                node-version: [16.x, 18.x, 20.x]
-
         steps:
             - uses: actions/checkout@v4
 
-            - name: Use Node.js ${{ matrix.node-version }}
-              uses: actions/setup-node@v4
+            - name: Set up Bun
+              uses: oven-sh/setup-bun@v1
               with:
-                  node-version: ${{ matrix.node-version }}
-                  cache: 'npm'
+                  bun-version: 'latest'
 
-            - run: npm ci
-            - run: npm run build
-            - run: npm test
+            - name: Install dependencies
+              run: bun install
+
+            - name: Build
+              run: bun run build
+
+            - name: Run tests
+              run: bun test

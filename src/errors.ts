@@ -18,5 +18,8 @@ export class RedisError extends Error {
 	) {
 		super(message);
 		this.name = 'RedisError';
+		this.stack = new Error().stack;
+		this.message = message;
+		this.originalError = originalError;
 	}
 }

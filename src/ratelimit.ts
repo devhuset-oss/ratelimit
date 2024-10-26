@@ -1,55 +1,58 @@
 import { RedisClientType } from 'redis';
 import { ConfigurationError, RedisError } from './errors';
-import {
-	LimiterOptions,
-	LimiterOptionsWithoutType,
-	RatelimitResponse,
-} from './types';
 
-/**
- * Rate limiter implementation supporting both fixed and sliding window algorithms
- */
-export class Ratelimit {
-	private redis: RedisClientType;
-	private options: LimiterOptions;
+interface RatelimitResponse {
+	success: boolean;
+	limit: number; // The configured limit
+	remaining: number; // Remaining requests in window
+	reset: number; // When the limit resets (unix timestamp in ms)
+}
+
+interface RatelimitOptionsWithoutType {
+	/**
+	 * Maximum number of requests allowed within the window
+	 */
+	limit: number;
 
 	/**
-	 * Create a new rate limiter instance
-	 * @param redis - Redis client instance
-	 * @param options - Rate limiter configuration
+	 * Time window in seconds
 	 */
-	constructor(redis: RedisClientType, options: LimiterOptions) {
-		this.validateOptions(options);
+	window: number;
+
+	/**
+	 * Optional prefix for Redis keys
+	 * @default "ratelimit"
+	 */
+	prefix?: string;
+}
+
+interface RatelimitOptions extends RatelimitOptionsWithoutType {
+	type: 'fixed' | 'sliding';
+}
+
+export class Ratelimit {
+	private readonly redis: RedisClientType;
+	private scriptSha: string | null = null;
+
+	constructor(
+		redis: RedisClientType,
+		private readonly options: RatelimitOptions
+	) {
 		this.redis = redis;
-		this.options = options;
+		this.validateOptions(options);
 	}
 
-	/**
-	 * Create a fixed window rate limiter configuration
-	 */
-	static fixedWindow(params: LimiterOptionsWithoutType): LimiterOptions {
+	static fixedWindow(params: RatelimitOptionsWithoutType): RatelimitOptions {
 		return { type: 'fixed', ...params };
 	}
 
-	/**
-	 * Create a sliding window rate limiter configuration
-	 */
-	static slidingWindow(params: LimiterOptionsWithoutType): LimiterOptions {
+	static slidingWindow(
+		params: RatelimitOptionsWithoutType
+	): RatelimitOptions {
 		return { type: 'sliding', ...params };
 	}
 
-	/**
-	 * Generate Redis key with prefix
-	 */
-	private getKey(key: string, suffix: string): string {
-		const prefix = this.options.prefix || 'ratelimit';
-		return `${prefix}:${key}:${suffix}`;
-	}
-
-	/**
-	 * Validate configuration options
-	 */
-	private validateOptions(options: LimiterOptions): void {
+	private validateOptions(options: RatelimitOptions): void {
 		if (options.limit <= 0) {
 			throw new ConfigurationError('Limit must be greater than 0');
 		}
@@ -63,18 +66,19 @@ export class Ratelimit {
 		}
 	}
 
-	/**
-	 * Check if a request should be rate limited
-	 */
-	async limit(key: string): Promise<RatelimitResponse> {
+	private getKey(identifier: string, suffix: string): string {
+		const prefix = this.options.prefix || 'ratelimit';
+		return `${prefix}:${identifier}:${suffix}`;
+	}
+
+	async limit(identifier: string): Promise<RatelimitResponse> {
 		try {
 			if (this.options.type === 'fixed') {
-				return await this.fixedWindowLimit(key);
+				return await this.fixedWindowLimit(identifier);
 			} else {
-				return await this.slidingWindowLimit(key);
+				return await this.slidingWindowLimit(identifier);
 			}
 		} catch (error) {
-			// Always create a new RedisError
 			throw new RedisError(
 				'Failed to check rate limit',
 				error instanceof Error ? error : new Error(String(error))
@@ -82,93 +86,125 @@ export class Ratelimit {
 		}
 	}
 
-	/**
-	 * Fixed window rate limiting implementation
-	 */
-	private async fixedWindowLimit(key: string): Promise<RatelimitResponse> {
+	private async loadScript(): Promise<void> {
+		try {
+			this.scriptSha = await this.redis.scriptLoad(SLIDING_WINDOW_SCRIPT);
+		} catch (error) {
+			throw new RedisError(
+				'Failed to load rate limit script',
+				error instanceof Error ? error : new Error(String(error))
+			);
+		}
+	}
+
+	private async fixedWindowLimit(
+		identifier: string
+	): Promise<RatelimitResponse> {
 		const now = Date.now();
 		const currentWindow = Math.floor(now / 1000 / this.options.window);
-		const windowKey = this.getKey(key, currentWindow.toString());
+		const windowKey = this.getKey(identifier, currentWindow.toString());
 
+		// Increment counter
 		const count = await this.redis.incr(windowKey);
+
+		// Set expiry on new keys
 		if (count === 1) {
 			await this.redis.expire(windowKey, this.options.window);
 		}
 
+		// Calculate reset time
 		const resetTime = (currentWindow + 1) * this.options.window;
 
+		// Check if over limit
 		if (count > this.options.limit) {
 			const ttl = await this.redis.ttl(windowKey);
 			return {
-				success: false,
-				reset: Math.floor(now / 1000) + ttl,
+				success: false, // Always false for fixed window
+				limit: this.options.limit,
 				remaining: 0,
-				retryAfter: ttl,
+				reset: Math.floor(now / 1000) + ttl,
 			};
 		}
 
 		return {
-			success: true,
-			reset: resetTime,
+			success: true, // Always true for fixed window
+			limit: this.options.limit,
 			remaining: this.options.limit - count,
+			reset: resetTime,
 		};
 	}
 
-	/**
-	 * Sliding window rate limiting implementation
-	 */
-	private async slidingWindowLimit(key: string): Promise<RatelimitResponse> {
+	private async slidingWindowLimit(
+		identifier: string
+	): Promise<RatelimitResponse> {
+		if (!this.scriptSha) {
+			await this.loadScript();
+		}
+
 		const now = Date.now();
 		const windowMs = this.options.window * 1000;
 		const currentWindow = Math.floor(now / windowMs);
-		const currentKey = this.getKey(key, currentWindow.toString());
-		const previousKey = this.getKey(key, (currentWindow - 1).toString());
 
-		// Get counts from both windows
-		const [currentCountStr, previousCountStr] = await Promise.all([
-			this.redis.get(currentKey),
-			this.redis.get(previousKey),
-		]);
-
-		const currentCount = parseInt(currentCountStr || '0', 10);
-		const previousCount = parseInt(previousCountStr || '0', 10);
-
-		// Calculate the weight of the previous window
-		const timeIntoCurrentWindow = now % windowMs;
-		const proportionOfWindowRemaining = Math.max(
-			0,
-			(windowMs - timeIntoCurrentWindow) / windowMs
+		const currentKey = this.getKey(identifier, currentWindow.toString());
+		const previousKey = this.getKey(
+			identifier,
+			(currentWindow - 1).toString()
 		);
-		const weightedPrevious = previousCount * proportionOfWindowRemaining;
 
-		// Calculate total weighted rate
-		const rate = weightedPrevious + currentCount;
-
-		// Check if adding one more request would exceed limit
-		if (rate + 1 > this.options.limit) {
-			return {
-				success: false,
-				reset: Math.floor((currentWindow + 1) * this.options.window),
-				remaining: 0,
-				retryAfter: Math.max(
-					1,
-					Math.ceil(
-						((rate + 1 - this.options.limit) * windowMs) /
-							(previousCount || 1) /
-							1000
-					)
-				),
-			};
-		}
-
-		// Increment current window counter
-		await this.redis.incr(currentKey);
-		await this.redis.expire(currentKey, this.options.window * 2);
+		const remaining = (await this.redis.evalSha(this.scriptSha!, {
+			keys: [currentKey, previousKey],
+			arguments: [
+				this.options.limit.toString(),
+				now.toString(),
+				windowMs.toString(),
+				'1',
+			],
+		})) as number;
 
 		return {
-			success: true,
-			reset: Math.floor((currentWindow + 1) * this.options.window),
-			remaining: Math.floor(this.options.limit - rate - 1),
+			success: remaining >= 0,
+			limit: this.options.limit,
+			remaining: Math.max(0, remaining),
+			reset: (currentWindow + 1) * windowMs,
 		};
 	}
 }
+
+export const SLIDING_WINDOW_SCRIPT = `
+local currentKey  = KEYS[1]           -- identifier including prefixes
+local previousKey = KEYS[2]           -- key of the previous bucket
+local tokens      = tonumber(ARGV[1]) -- tokens per window
+local now         = tonumber(ARGV[2]) -- current timestamp in milliseconds
+local window      = tonumber(ARGV[3]) -- interval in milliseconds
+local incrementBy = tonumber(ARGV[4]) -- increment rate per request, default is 1
+
+-- Get current window count
+local current_count = tonumber(redis.call("GET", currentKey) or "0")
+-- Get previous window count
+local previous_count = tonumber(redis.call("GET", previousKey) or "0")
+
+-- Calculate the percentage of the current window that has passed
+local percentageInCurrent = (now % window) / window
+
+-- Calculate weighted previous count using math.floor
+local weighted_previous = math.floor((1 - percentageInCurrent) * previous_count)
+
+-- Check if cumulative requests exceed the limit **before** incrementing
+local cumulative_count = weighted_previous + current_count
+
+if cumulative_count >= tokens then
+  return -1
+end
+
+-- If we get here, increment the current window
+local new_count = redis.call("INCRBY", currentKey, incrementBy)
+
+-- Set expiration for the current key if it's the first time it's set
+if new_count == incrementBy then
+  redis.call("PEXPIRE", currentKey, window * 2 + 1000)
+end
+
+-- Calculate remaining tokens
+local remaining = tokens - (weighted_previous + new_count)
+return remaining
+`;
