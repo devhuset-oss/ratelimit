@@ -1,4 +1,3 @@
-// errors.test.ts
 import { describe, expect, it } from 'bun:test';
 import { ConfigurationError, RedisError } from './errors';
 
@@ -15,24 +14,24 @@ describe('Custom Errors', () => {
 	});
 
 	describe('RedisError', () => {
+		const defaultMessage = 'Redis operation failed';
+
 		it('should create an error with the correct name and message', () => {
-			const message = 'Redis operation failed';
 			const originalError = new Error('Connection lost');
-			const error = new RedisError(message, originalError);
+			const error = new RedisError(defaultMessage, originalError);
 
 			expect(error).toBeInstanceOf(Error);
 			expect(error.name).toBe('RedisError');
-			expect(error.message).toBe(message);
+			expect(error.message).toBe(defaultMessage);
 			expect(error.originalError).toBe(originalError);
 		});
 
 		it('should handle cases where originalError is undefined', () => {
-			const message = 'Redis operation failed';
-			const error = new RedisError(message);
+			const error = new RedisError(defaultMessage);
 
 			expect(error).toBeInstanceOf(Error);
 			expect(error.name).toBe('RedisError');
-			expect(error.message).toBe(message);
+			expect(error.message).toBe(defaultMessage);
 			expect(error.originalError).toBeUndefined();
 		});
 	});
