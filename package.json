@@ -1,6 +1,6 @@
 {
 	"name": "@devhuset-oss/ratelimit",
-	"version": "1.0.0-beta.1",
+	"version": "1.0.0-beta.2",
 	"description": "A flexible rate limiting library with support for fixed and sliding windows using Redis",
 	"main": "dist/index.js",
 	"types": "dist/index.d.ts",
