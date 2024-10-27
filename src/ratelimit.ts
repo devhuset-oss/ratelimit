@@ -178,7 +178,7 @@ local cumulative_count = math.floor(weighted_previous) + current_count + increme
 
 if cumulative_count > tokens then
     local needed = cumulative_count - tokens + increment_by
-    local retry_after = window
+    local retry_after = window - time_in_current
     
     if previous_count > 0 then
         local time_needed = (needed * window) / previous_count
