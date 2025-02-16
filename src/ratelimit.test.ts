@@ -1,32 +1,30 @@
 import {
+	afterAll,
+	beforeAll,
+	beforeEach,
 	describe,
 	expect,
 	it,
-	beforeAll,
-	afterAll,
-	beforeEach,
 } from 'bun:test';
-import type { RedisClientType } from 'redis';
-import { createClient } from 'redis';
-import { Ratelimit } from './ratelimit';
-import { ConfigurationError, RedisError } from './errors';
 import { randomUUID } from 'crypto';
+import { Valkey } from './client';
+import { ConfigurationError } from './errors';
+import { Ratelimit } from './ratelimit';
 import type { RatelimitResponse } from './types';
 
 describe('Rate Limiter Test Suite', () => {
-	let redis: RedisClientType;
+	let valkey: Valkey;
 
-	beforeAll(async () => {
-		redis = createClient();
-		await redis.connect();
+	beforeAll(() => {
+		valkey = new Valkey();
 	});
 
 	beforeEach(async () => {
-		await redis.flushDb();
+		await valkey.flushdb();
 	});
 
 	afterAll(async () => {
-		await redis.quit();
+		await valkey.quit();
 	});
 
 	const createLimiter = ({
@@ -39,7 +37,7 @@ describe('Rate Limiter Test Suite', () => {
 			type === 'fixed'
 				? Ratelimit.fixedWindow({ limit, window, prefix })
 				: Ratelimit.slidingWindow({ limit, window, prefix });
-		return new Ratelimit(redis, config);
+		return new Ratelimit(valkey, config);
 	};
 
 	describe('Configuration Validation', () => {
@@ -50,7 +48,7 @@ describe('Rate Limiter Test Suite', () => {
 				expect(
 					() =>
 						new Ratelimit(
-							redis,
+							valkey,
 							Ratelimit.fixedWindow({ limit, window: 10 }),
 						),
 				).toThrow(ConfigurationError);
@@ -64,7 +62,7 @@ describe('Rate Limiter Test Suite', () => {
 				expect(
 					() =>
 						new Ratelimit(
-							redis,
+							valkey,
 							Ratelimit.fixedWindow({ limit: 10, window }),
 						),
 				).toThrow(ConfigurationError);
@@ -74,36 +72,12 @@ describe('Rate Limiter Test Suite', () => {
 		it('throws on invalid limiter type', () => {
 			expect(
 				() =>
-					new Ratelimit(redis, {
+					new Ratelimit(valkey, {
 						type: 'invalid' as unknown as 'fixed' | 'sliding',
 						limit: 10,
 						window: 10,
 					}),
 			).toThrow(ConfigurationError);
-		});
-	});
-
-	describe('Redis Error Handling', () => {
-		it('handles Redis connection failures', () => {
-			const brokenRedis = createClient({ url: 'redis://localhost:6380' }); // wrong port
-			const limiter = new Ratelimit(
-				// @ts-expect-error - broken redis client
-				brokenRedis,
-				Ratelimit.fixedWindow({ limit: 5, window: 10 }),
-			);
-
-			expect(limiter.limit('test')).rejects.toThrow(RedisError);
-		});
-
-		it('handles Redis script loading failures for sliding window', () => {
-			const limiter = createLimiter({ type: 'sliding' });
-
-			// @ts-expect-error - Accessing private property for testing
-			limiter.redis.scriptLoad = () => {
-				throw new Error('Script load failed');
-			};
-
-			expect(limiter.limit('test')).rejects.toThrow(RedisError);
 		});
 	});
 

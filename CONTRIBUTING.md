@@ -2,11 +2,11 @@
 
 We love your input! We want to make contributing to @devhuset-oss/ratelimit as easy and transparent as possible, whether it's:
 
--   Reporting a bug
--   Discussing the current state of the code
--   Submitting a fix
--   Proposing new features
--   Becoming a maintainer
+- Reporting a bug
+- Discussing the current state of the code
+- Submitting a fix
+- Proposing new features
+- Becoming a maintainer
 
 ## We Develop with GitHub
 
@@ -43,10 +43,10 @@ We use Bun for testing. Run the test suite with:
 bun test
 ```
 
-Make sure to have Redis running locally before running tests. You can start Redis using Docker:
+Make sure to have Valkey running locally before running tests. You can start Valkey using Docker:
 
 ```bash
-docker run --rm -p 6379:6379 redis
+docker run --rm -p 6379:6379 valkey/valkey
 ```
 
 ## Project Structure
@@ -64,6 +64,6 @@ src/
 
 ## Code Style
 
--   We use TypeScript and maintain strict type checking
--   Format code using Prettier
--   Follow existing code style and structure
+- We use TypeScript and maintain strict type checking
+- Format code using Prettier
+- Follow existing code style and structure

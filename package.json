@@ -1,23 +1,31 @@
 {
 	"name": "@devhuset-oss/ratelimit",
-	"version": "1.0.0-beta.3",
-	"description": "A flexible rate limiting library with support for fixed and sliding windows using Redis",
-	"main": "dist/index.js",
-	"types": "dist/index.d.ts",
-	"type": "module",
+	"version": "1.0.0-beta.11",
+	"description": "A flexible rate limiting library with support for fixed and sliding windows using Valkey",
+	"main": "./dist/index.js",
+	"module": "./dist/index.mjs",
+	"types": "./dist/index.d.ts",
+	"exports": {
+		".": {
+			"require": "./dist/index.js",
+			"import": "./dist/index.mjs",
+			"types": "./dist/index.d.ts"
+		}
+	},
 	"files": [
 		"dist",
 		"README.md",
 		"LICENSE"
 	],
 	"scripts": {
-		"build": "tsc",
+		"build": "tsup",
 		"test": "bun test",
 		"lint": "eslint 'src/**/*.ts'",
 		"format": "prettier --write \"src/**/*.ts\""
 	},
 	"keywords": [
 		"rate-limit",
+		"valkey",
 		"redis",
 		"sliding-window",
 		"fixed-window",
@@ -27,19 +35,20 @@
 	"author": "Devhuset",
 	"license": "MIT",
 	"peerDependencies": {
-		"redis": "^4.7.0"
+		"iovalkey": "^0.3.1"
 	},
 	"devDependencies": {
 		"@types/bun": "latest",
-		"@types/node": "^22.8.0",
-		"@typescript-eslint/eslint-plugin": "^8.11.0",
-		"@typescript-eslint/parser": "^8.11.0",
-		"eslint": "^9.13.0",
-		"eslint-config-prettier": "^9.1.0",
-		"prettier": "^3.3.3",
-		"redis": "^4.7.0",
-		"typescript": "^5.6.3",
-		"typescript-eslint": "^8.11.0"
+		"@types/node": "^22.13.4",
+		"@typescript-eslint/eslint-plugin": "^8.24.0",
+		"@typescript-eslint/parser": "^8.24.0",
+		"eslint": "^9.20.1",
+		"eslint-config-prettier": "^10.0.1",
+		"iovalkey": "^0.3.1",
+		"prettier": "^3.5.1",
+		"tsup": "^8.3.6",
+		"typescript": "^5.7.3",
+		"typescript-eslint": "^8.24.0"
 	},
 	"repository": {
 		"type": "git",

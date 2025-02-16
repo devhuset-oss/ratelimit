@@ -1,31 +1,29 @@
 import {
+	afterAll,
+	beforeAll,
+	beforeEach,
 	describe,
 	expect,
 	it,
-	beforeAll,
-	afterAll,
-	beforeEach,
 } from 'bun:test';
-import type { RedisClientType } from 'redis';
-import { createClient } from 'redis';
-import { Ratelimit } from './ratelimit';
 import { randomUUID } from 'crypto';
+import { Valkey } from './client';
+import { Ratelimit } from './ratelimit';
 
 describe('Sliding Window Rate Limiter Edge Cases', () => {
-	let redis: RedisClientType;
+	let valkey: Valkey;
 	const BASE_TIME = 1000000;
 
-	beforeAll(async () => {
-		redis = createClient();
-		await redis.connect();
+	beforeAll(() => {
+		valkey = new Valkey();
 	});
 
 	beforeEach(async () => {
-		await redis.flushDb();
+		await valkey.flushdb();
 	});
 
 	afterAll(async () => {
-		await redis.quit();
+		await valkey.quit();
 	});
 
 	const createLimiter = (
@@ -37,7 +35,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 
 		return {
 			limiter: new Ratelimit(
-				redis,
+				valkey,
 				Ratelimit.slidingWindow({
 					limit,
 					window,
@@ -148,7 +146,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 		const uniquePrefix = `ratelimit-${randomUUID()}`;
 
 		const limiter = new Ratelimit(
-			redis,
+			valkey,
 			Ratelimit.slidingWindow({
 				limit: 5,
 				window: 1,
@@ -171,7 +169,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 
 		// Create a new limiter with updated time
 		const newLimiter = new Ratelimit(
-			redis,
+			valkey,
 			Ratelimit.slidingWindow({
 				limit: 5,
 				window: 1,
@@ -200,7 +198,7 @@ describe('Sliding Window Rate Limiter Edge Cases', () => {
 
 	it('expires old requests correctly', async () => {
 		const limiter = new Ratelimit(
-			redis,
+			valkey,
 			Ratelimit.slidingWindow({
 				limit: 10,
 				window: 1,

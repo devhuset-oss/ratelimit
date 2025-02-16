@@ -13,19 +13,19 @@ export class ConfigurationError extends Error {
 }
 
 /**
- * Thrown when Redis operations fail. Includes the original Redis error if available
+ * Thrown when Valkey operations fail. Includes the original Valkey error if available
  * @example
  * ```ts
- * throw new RedisError('Failed to check rate limit', originalError)
+ * throw new ValkeyError('Failed to check rate limit', originalError)
  * ```
  */
-export class RedisError extends Error {
+export class ValkeyError extends Error {
 	constructor(
 		message: string,
 		public originalError?: Error,
 	) {
 		super(message);
-		this.name = 'RedisError';
+		this.name = 'ValkeyError';
 		this.stack = new Error().stack;
 		this.message = message;
 		this.originalError = originalError;

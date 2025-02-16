@@ -24,7 +24,7 @@ export interface RatelimitOptionsWithoutType {
 	/** Time window in seconds */
 	window: number;
 
-	/** Optional prefix for Redis keys to prevent collisions */
+	/** Optional prefix for Valkey keys to prevent collisions */
 	prefix?: string;
 }
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'bun:test';
-import { ConfigurationError, RedisError } from './errors';
+import { ConfigurationError, ValkeyError } from './errors';
 
 describe('Custom Errors', () => {
 	describe('ConfigurationError', () => {
@@ -13,24 +13,24 @@ describe('Custom Errors', () => {
 		});
 	});
 
-	describe('RedisError', () => {
-		const defaultMessage = 'Redis operation failed';
+	describe('ValkeyError', () => {
+		const defaultMessage = 'Valkey operation failed';
 
 		it('should create an error with the correct name and message', () => {
 			const originalError = new Error('Connection lost');
-			const error = new RedisError(defaultMessage, originalError);
+			const error = new ValkeyError(defaultMessage, originalError);
 
 			expect(error).toBeInstanceOf(Error);
-			expect(error.name).toBe('RedisError');
+			expect(error.name).toBe('ValkeyError');
 			expect(error.message).toBe(defaultMessage);
 			expect(error.originalError).toBe(originalError);
 		});
 
 		it('should handle cases where originalError is undefined', () => {
-			const error = new RedisError(defaultMessage);
+			const error = new ValkeyError(defaultMessage);
 
 			expect(error).toBeInstanceOf(Error);
-			expect(error.name).toBe('RedisError');
+			expect(error.name).toBe('ValkeyError');
 			expect(error.message).toBe(defaultMessage);
 			expect(error.originalError).toBeUndefined();
 		});

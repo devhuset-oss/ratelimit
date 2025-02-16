@@ -4,45 +4,41 @@
 [![Test](https://github.com/devhuset-oss/ratelimit/actions/workflows/test.yml/badge.svg)](https://github.com/devhuset-oss/ratelimit/actions/workflows/test.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A flexible Redis-based rate limiting library supporting both fixed and sliding window algorithms. Perfect for API rate limiting, request throttling, and protecting your services from abuse.
+A flexible Valkey-based rate limiting library supporting both fixed and sliding window algorithms. Perfect for API rate limiting, request throttling, and protecting your services from abuse.
 
 ## Features
 
--   🚦 Fixed window rate limiting
--   📊 Sliding window rate limiting
--   🔄 Redis-backed for distributed systems
--   🎯 TypeScript support
--   ⚡️ High performance
--   🛡️ Protection against race conditions
--   💪 Zero dependencies (except Redis)
+- 🚦 Fixed window rate limiting
+- 📊 Sliding window rate limiting
+- 🔄 Valkey-backed for distributed systems
+- 🎯 TypeScript support
+- ⚡️ High performance
+- 🛡️ Protection against race conditions
+- 💪 Zero dependencies (except Valkey)
 
 ## Installation
 
 ```bash
-npm install @devhuset-oss/ratelimit redis
+npm install @devhuset-oss/ratelimit
 # or
-yarn add @devhuset-oss/ratelimit redis
+yarn add @devhuset-oss/ratelimit
 # or
-pnpm add @devhuset-oss/ratelimit redis
+pnpm add @devhuset-oss/ratelimit
 # or
-bun add @devhuset-oss/ratelimit redis
+bun add @devhuset-oss/ratelimit
 ```
 
 ## Quick Start
 
 ```typescript
-import { createClient } from 'redis';
-import { Ratelimit } from '@devhuset-oss/ratelimit';
+import { Ratelimit, Valkey } from '@devhuset-oss/ratelimit';
 
-// Create Redis client
-const redis = createClient({
-	url: 'redis://localhost:6379',
-});
-await redis.connect();
+// Create Valkey client
+const valkey = new Valkey('redis://localhost:6379');
 
 // Create rate limiter (10 requests per 60 seconds)
 const limiter = new Ratelimit(
-	redis,
+	valkey,
 	Ratelimit.slidingWindow({
 		limit: 10, // requests
 		window: 60, // seconds
@@ -69,7 +65,7 @@ Fixed window rate limiting divides time into fixed intervals (e.g., 60-second wi
 
 ```typescript
 const limiter = new Ratelimit(
-	redis,
+	valkey,
 	Ratelimit.fixedWindow({
 		limit: 100,
 		window: 60,
@@ -84,7 +80,7 @@ Sliding window rate limiting provides smoother rate limiting by considering both
 
 ```typescript
 const limiter = new Ratelimit(
-	redis,
+	valkey,
 	Ratelimit.slidingWindow({
 		limit: 100,
 		window: 60,
@@ -103,7 +99,7 @@ interface RatelimitOptionsWithoutType {
     limit: number;
     /** Window duration in seconds */
     window: number;
-    /** Optional Redis key prefix */
+    /** Optional Valkey key prefix */
     prefix?: string;
 }
 
@@ -135,17 +131,13 @@ interface RatelimitResponse {
 
 ```typescript
 import { NextResponse } from 'next/server';
-import { createClient } from 'redis';
-import { Ratelimit } from '@devhuset-oss/ratelimit';
+import { Ratelimit, Valkey } from '@devhuset-oss/ratelimit';
 import { headers } from 'next/headers';
 
-const redis = createClient({
-	url: process.env.REDIS_URL,
-});
-await redis.connect();
+const valkey = new Valkey(process.env.VALKEY_URL);
 
 const ratelimit = new Ratelimit(
-	redis,
+	valkey,
 	Ratelimit.slidingWindow({
 		limit: 10,
 		window: 60,
@@ -154,25 +146,22 @@ const ratelimit = new Ratelimit(
 );
 
 export async function GET() {
-	const headersList = headers();
+	const headersList = await headers();
 	const ip = headersList.get('x-forwarded-for') || '127.0.0.1';
 
 	const { success, remaining, reset, retry_after } =
 		await ratelimit.limit(ip);
 
 	if (!success) {
-		return NextResponse.json(
-			{ error: 'Too many requests' },
-			{
-				status: 429,
-				headers: {
-					'X-RateLimit-Limit': '10',
-					'X-RateLimit-Remaining': remaining.toString(),
-					'X-RateLimit-Reset': reset.toString(),
-					'Retry-After': Math.ceil(retry_after / 1000).toString(),
-				},
+		return new Response(JSON.stringify({ error: 'Too many requests' }), {
+			status: 429,
+			headers: {
+				'X-RateLimit-Limit': '10',
+				'X-RateLimit-Remaining': remaining.toString(),
+				'X-RateLimit-Reset': reset.toString(),
+				'Retry-After': Math.ceil(retry_after / 1000).toString(),
 			},
-		);
+		});
 	}
 
 	// Process request
@@ -182,19 +171,15 @@ export async function GET() {
 ### Express Middleware
 
 ```typescript
-import { createClient } from 'redis';
-import { Ratelimit } from '@devhuset-oss/ratelimit';
+import { Ratelimit, Valkey } from '@devhuset-oss/ratelimit';
 import express from 'express';
 
 const app = express();
 
-const redis = createClient({
-	url: process.env.REDIS_URL,
-});
-await redis.connect();
+const valkey = new Valkey(process.env.VALKEY_URL);
 
 const ratelimit = new Ratelimit(
-	redis,
+	valkey,
 	Ratelimit.slidingWindow({
 		limit: 10,
 		window: 60,

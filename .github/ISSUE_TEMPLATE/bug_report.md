@@ -21,10 +21,10 @@ A clear and concise description of what you expected to happen.
 
 **Environment:**
 
--   Node.js version:
--   Redis version:
--   Package version:
--   OS:
+- Node.js version:
+- Valkey version:
+- Package version:
+- OS:
 
 **Additional context**
 Add any other context about the problem here.

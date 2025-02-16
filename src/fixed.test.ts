@@ -1,33 +1,31 @@
 import {
+	afterAll,
+	beforeAll,
+	beforeEach,
 	describe,
 	expect,
 	it,
-	beforeAll,
-	afterAll,
-	beforeEach,
 } from 'bun:test';
-import type { RedisClientType } from 'redis';
-import { createClient } from 'redis';
 import { randomUUID } from 'crypto';
+import { Valkey } from './client';
 import { Ratelimit } from './ratelimit';
 
 describe('Fixed Window Rate Limiter', () => {
-	let redis: RedisClientType;
+	let valkey: Valkey;
 	const BASE_TIME = 1000000;
 	const DEFAULT_WINDOW = 10; // seconds
 	const DEFAULT_LIMIT = 5;
 
-	beforeAll(async () => {
-		redis = createClient();
-		await redis.connect();
+	beforeAll(() => {
+		valkey = new Valkey();
 	});
 
 	beforeEach(async () => {
-		await redis.flushDb();
+		await valkey.flushdb();
 	});
 
 	afterAll(async () => {
-		await redis.quit();
+		await valkey.quit();
 	});
 
 	const createLimiter = (mockCurrentTime = BASE_TIME): Ratelimit => {
@@ -35,7 +33,7 @@ describe('Fixed Window Rate Limiter', () => {
 		const uniquePrefix = `ratelimit-${randomUUID()}`;
 
 		return new Ratelimit(
-			redis,
+			valkey,
 			Ratelimit.fixedWindow({
 				limit: DEFAULT_LIMIT,
 				window: DEFAULT_WINDOW,
@@ -88,7 +86,7 @@ describe('Fixed Window Rate Limiter', () => {
 		const mockTimeProvider = (): number => mockCurrentTime;
 		const uniquePrefix = `ratelimit-${randomUUID()}`;
 		const limiter = new Ratelimit(
-			redis,
+			valkey,
 			Ratelimit.fixedWindow({
 				limit: DEFAULT_LIMIT,
 				window: DEFAULT_WINDOW,
